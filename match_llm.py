@@ -3,8 +3,8 @@ from openai import OpenAI
 import re
 
 client = OpenAI(api_key="api_key",
-                base_url="base_url")
-model_name = "model_name"
+                base_url="https://dashscope.aliyuncs.com/compatible-mode/v1")
+model_name = "qwen-max"
 
 lrc_path = "./autodl-tmp/lyrics.lrc"
 scenes_length_path = "./autodl-tmp/scenes_length.json"

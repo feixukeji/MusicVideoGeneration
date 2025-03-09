@@ -1,6 +1,6 @@
 # 音乐视频生成
 
-根据给定的音乐（含歌词）在给定视频集内选出合适的片段，进行剪辑、拼接、合成。
+根据给定的音乐（含歌词）在给定视频集内剪出合适的片段，进行剪辑、拼接、合成。
 
 ```sh
 mkdir -p /root/autodl-tmp/huggingface
@@ -43,6 +43,5 @@ python compose.py
 ```
 
 本项目用到了以下模型：
-
 - [Qwen2.5-VL](https://github.com/QwenLM/Qwen2.5-VL)
 - [TransNetV2](https://github.com/soCzech/TransNetV2)
