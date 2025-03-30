@@ -1,9 +1,10 @@
 import json
 import re
+import os
 from sentence_transformers import SentenceTransformer
 
 lrc_path = "./autodl-tmp/lyrics.lrc"
-descriptions_path = "./autodl-tmp/descriptions.json"
+scenes_dir = "./autodl-tmp/scenes/"
 best_matches_path = "./autodl-tmp/best_matches.json"
 
 # 读取歌词
@@ -26,9 +27,20 @@ def parse_lyrics(lyrics):
 
 timestamps, parsed_lyrics = parse_lyrics(lyrics)
 
-# 读取视频描述
-with open(descriptions_path, "r", encoding="utf-8") as f:
-    descriptions = json.load(f)
+# 汇总所有子文件夹的descriptions.json
+descriptions = {}
+video_folders = [f for f in os.listdir(scenes_dir) if os.path.isdir(os.path.join(scenes_dir, f))]
+
+print(f"Found {len(video_folders)} video folders to process")
+
+for video_folder in video_folders:
+    folder_path = os.path.join(scenes_dir, video_folder)
+    descriptions_path = os.path.join(folder_path, "descriptions.json")
+    
+    with open(descriptions_path, "r", encoding="utf-8") as f:
+        folder_descriptions = json.load(f)
+    
+    descriptions.update(folder_descriptions)
 
 # 去除视频描述中的回车
 for key, value in descriptions.items():
@@ -45,6 +57,8 @@ queries = [get_detailed_instruct(task, lyric) for lyric in parsed_lyrics]
 # No need to add instruction for retrieval documents
 documents = list(descriptions.values())
 input_texts = queries + documents
+
+print(f"Processing {len(parsed_lyrics)} lyrics and {len(documents)} scene descriptions")
 
 model = SentenceTransformer('intfloat/multilingual-e5-large-instruct')
 

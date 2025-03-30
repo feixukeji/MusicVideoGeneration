@@ -1,6 +1,6 @@
 # 音乐视频合成
 
-根据给定的音乐（含歌词）在给定视频集内剪出合适的片段，进行剪辑、拼接、合成。
+根据给定的音乐（歌词）在给定视频集内剪出契合的片段，进行剪辑、拼接、合成。
 
 ## 使用方法
 
@@ -42,12 +42,6 @@ pip install qwen-vl-utils[decord] sentence_transformers openai
 python generate_scenes.py
 ```
 
-### 计算视频片段长度
-
-```sh
-python scenes_length.py
-```
-
 ### 生成视频片段描述
 
 ```sh
@@ -62,7 +56,7 @@ python generate_descriptions.py
 python match_llm.py
 ```
 
-或使用Multilingual-E5文本排序：
+或使用Multilingual-E5文本排序（推荐）：
 
 ```sh
 python match_sentence_transformers.py
@@ -74,10 +68,10 @@ python match_sentence_transformers.py
 python match_gte_rerank.py
 ```
 
-### 合成视频
+### 合成视频（已弃用）
 
 ```sh
-python compose.py
+# python compose.py
 ```
 
 ## 鸣谢
