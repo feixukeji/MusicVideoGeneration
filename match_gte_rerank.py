@@ -3,7 +3,7 @@ import json
 
 descriptions_path = "./autodl-tmp/descriptions.json"
 
-dashscope.api_key  = "api_key"
+dashscope.api_key = "api_key"
 
 with open(descriptions_path, "r", encoding="utf-8") as f:
     descriptions = json.load(f)
