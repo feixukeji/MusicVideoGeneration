@@ -60,7 +60,7 @@ for video_name in video_files:
         scene_filename = f"{video_basename}_scene{i+1:03d}.mp4"
         output_file = os.path.join(video_output_dir, scene_filename)
         
-        ffmpeg.input(video_path, ss=start_time, t=duration).output(output_file, map_metadata="-1").run()
+        ffmpeg.input(video_path, ss=start_time, t=duration).output(output_file, map_metadata="-1").run(overwrite_output=True)
         
         # 计算并保存场景时长
         scene_duration = get_video_duration(output_file)
