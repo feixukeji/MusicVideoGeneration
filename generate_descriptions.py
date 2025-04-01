@@ -57,7 +57,7 @@ for video_folder in video_folders:
                         "max_pixels": 480 * 360,
                         # "fps": 8.0,
                     },
-                    {"type": "text", "text": "描述这个视频"},
+                    {"type": "text", "text": "简要描述这个视频"},
                 ],
             }
         ]
