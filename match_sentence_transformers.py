@@ -5,7 +5,7 @@ from sentence_transformers import SentenceTransformer
 
 lrc_path = "./autodl-tmp/lyrics.lrc"
 scenes_dir = "./autodl-tmp/scenes/"
-best_matches_path = "./autodl-tmp/best_matches.json"
+best_matches_path = "./autodl-tmp/best_matches.txt"
 
 # 读取歌词
 with open(lrc_path, "r", encoding="utf-8") as f:
@@ -65,12 +65,20 @@ model = SentenceTransformer('intfloat/multilingual-e5-large-instruct')
 embeddings = model.encode(input_texts, convert_to_tensor=True, normalize_embeddings=True)
 scores = embeddings[:len(queries)] @ embeddings[len(queries):].T
 
-best_matches = {}
-for i, lyric in enumerate(parsed_lyrics):
-    best_match_index = scores[i].argmax().item()
-    best_matches[lyric] = list(descriptions.keys())[best_match_index]
+# 修改为保存前3个最佳匹配
+scene_keys = list(descriptions.keys())
 
-# 保存最佳匹配结果
 with open(best_matches_path, "w", encoding="utf-8") as f:
-    json.dump(best_matches, f, ensure_ascii=False, indent=4)
-print(f"Best matches saved to {best_matches_path}.")
+    for i, lyric in enumerate(parsed_lyrics):
+        # 获取分数并按降序排列的索引
+        top_indices = scores[i].argsort(descending=True)[:3].tolist()
+        # 写入歌词
+        f.write(f"歌词: {lyric}\n")
+        # 写入前3个最佳匹配
+        for rank, idx in enumerate(top_indices, 1):
+            match_key = scene_keys[idx]
+            match_score = scores[i][idx].item()
+            f.write(f"  匹配{rank}: {match_key} (分数: {match_score:.4f})\n")
+        f.write("\n")  # 添加空行分隔不同歌词的匹配结果
+
+print(f"Top 3 matches for each lyric saved to {best_matches_path}.")

@@ -50,28 +50,28 @@ python generate_descriptions.py
 
 ### 匹配歌词与视频片段
 
-使用大语言模型询问：
+使用大语言模型询问（待更新）：
 
 ```sh
 python match_llm.py
 ```
 
-或使用Multilingual-E5文本排序（推荐）：
+或使用Multilingual-E5文本排序：
 
 ```sh
 python match_sentence_transformers.py
 ```
 
-或使用GTE文本排序：
+或使用GTE文本排序（待更新）：
 
 ```sh
 python match_gte_rerank.py
 ```
 
-### 合成视频（已弃用）
+### 合成视频（待更新）
 
 ```sh
-# python compose.py
+python compose.py
 ```
 
 ## 鸣谢
