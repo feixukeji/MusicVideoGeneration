@@ -1,8 +1,12 @@
+import os
 import torch
+import warnings
 from transnetv2_pytorch import TransNetV2
 import ffmpeg
-import os
 import json
+
+# Filter out warnings related to deterministic algorithm
+warnings.filterwarnings("ignore", message=".*Deterministic behavior was enabled.*")
 
 model = TransNetV2(device='auto')
 model.eval()
@@ -15,20 +19,20 @@ video_files = [f for f in sorted(os.listdir(input_dir)) if f.endswith((".mp4", "
 total_videos = len(video_files)
 
 for video_idx, video_name in enumerate(video_files, 1):
-    # 为每个视频创建单独的输出文件夹
+    # Create separate output folder for each video
     video_basename = os.path.splitext(video_name)[0]
     video_output_dir = os.path.join(base_output_dir, video_basename)
     os.makedirs(video_output_dir, exist_ok=True)
     
-    # 跳过已经处理过的视频
+    # Skip already processed videos
     scenes_length_path = os.path.join(video_output_dir, "scenes_length.json")
     if os.path.exists(scenes_length_path):
-        print(f"[{video_idx}/{total_videos}] Skipping {video_name} (already processed)")
+        print(f"[{video_idx}/{total_videos}] [INFO] Skipping {video_name} (already processed)")
         continue
     
     video_path = os.path.join(input_dir, video_name)
     
-    print(f"[{video_idx}/{total_videos}] Processing {video_name}...")
+    print(f"[{video_idx}/{total_videos}] [INFO] Processing {video_name}...")
     
     with torch.inference_mode():
         results = model.analyze_video(video_path)
@@ -56,11 +60,11 @@ for video_idx, video_name in enumerate(video_files, 1):
         scenes_length[scene_filename] = round(duration, 3)
         
         if (i + 1) % 10 == 0 or i + 1 == total_scenes:
-            print(f"  Scenes: {i+1}/{total_scenes}")
+            print(f"[{video_idx}/{total_videos}] [INFO] Progress: {i+1}/{total_scenes} scenes")
     
     with open(scenes_length_path, "w", encoding="utf-8") as f:
         json.dump(scenes_length, f, ensure_ascii=False, indent=4)
     
-    print(f"  Saved {total_scenes} scenes to {video_output_dir}")
+    print(f"[{video_idx}/{total_videos}] [DONE] Saved {total_scenes} scenes to {video_output_dir}")
     
-print("All videos have been processed.")
+print("[DONE] All videos have been processed")

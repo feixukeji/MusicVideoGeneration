@@ -11,12 +11,13 @@ scenes_length_path = "./autodl-tmp/scenes_length.json"
 descriptions_path = "./autodl-tmp/descriptions.json"
 best_matches_path = "./autodl-tmp/best_matches.json"
 
-# 读取歌词
+# Read lyrics
 with open(lrc_path, "r", encoding="utf-8") as f:
     lyrics = f.readlines()
 
 
 def parse_lyrics(lyrics):
+    """Parse lyrics and extract timestamps with content."""
     parsed_lyrics = []
     for line in lyrics:
         match = re.match(r'\[(\d+):(\d+\.\d+)\](.*)', line)
@@ -29,7 +30,7 @@ def parse_lyrics(lyrics):
 
 parsed_lyrics = parse_lyrics(lyrics)
 
-# 计算歌词时长
+# Calculate lyrics duration
 lyric_durations = []
 total_duration = 0
 for i in range(len(parsed_lyrics) - 1):
@@ -37,10 +38,10 @@ for i in range(len(parsed_lyrics) - 1):
     lyric_durations.append(duration)
     total_duration += duration
 
-# 计算平均时长
+# Calculate average duration
 average_duration = total_duration / (len(parsed_lyrics) - 1)
 
-# 最后一首歌词的时长
+# Duration for the last lyric line
 last_lyric_duration = average_duration * 1.2
 lyric_durations.append(last_lyric_duration)
 
@@ -48,11 +49,11 @@ lyric_durations.append(last_lyric_duration)
 with open(scenes_length_path, "r", encoding="utf-8") as f:
     scenes_lengths = json.load(f)
 
-# 读取视频描述
+# Read video descriptions
 with open(descriptions_path, "r", encoding="utf-8") as f:
     descriptions = json.load(f)
 
-# 去除视频描述中的回车
+# Remove newlines from video descriptions
 for key, value in descriptions.items():
     descriptions[key] = value.replace('\n', '')
 
@@ -66,8 +67,6 @@ def find_best_match(lyric, descriptions):
     prompt = ""
     for i, desc in enumerate(descriptions):
         prompt += f"{i+1}. {desc[1]}\n"
-    print(system_prompt)
-    print(prompt)
 
     while True:
         try:
@@ -81,55 +80,53 @@ def find_best_match(lyric, descriptions):
                 stream=False
             )
             response_text = response.choices[0].message.content
-            print(response_text)
             response_id = json.loads(response_text)["Answer"]
             best_match = descriptions[response_id - 1]
             break
         except Exception as e:
-            print(f"Error: {e}. Retrying...")
-    print(best_match)
+            print(f"[ERROR] {e}, retrying...")
     return best_match
 
 
 best_matches = {}
 
-# 读取最佳匹配结果
+# Load existing best matches
 try:
     with open(best_matches_path, "r", encoding="utf-8") as f:
         best_matches = json.load(f)
 except FileNotFoundError:
     best_matches = {}
 
-# 遍历每句歌词
+# Iterate through each lyric line
 for i, (timestamp, lyric) in enumerate(parsed_lyrics):
-    # 跳过已处理的歌词
+    # Skip already processed lyrics
     if str(timestamp) in best_matches:
         continue
 
-    print(f"Processing lyric {i+1}/{len(parsed_lyrics)}: {lyric}")
-    # 获取当前歌词的持续时间
+    print(f"[{i+1}/{len(parsed_lyrics)}] [INFO] Processing lyric: {lyric}")
+    # Get duration of current lyric
     lyric_duration = lyric_durations[i]
 
-    # 筛选出时长与歌词时长误差在以内的视频片段
+    # Filter video clips with duration error within threshold
     candidate_descriptions = []
     for desc in descriptions.items():
         scene_length = scenes_lengths[desc[0]]
 
-        # 计算时长误差
+        # Calculate duration error
         duration_error = abs(scene_length - lyric_duration) / lyric_duration
 
-        # 如果误差在以内，则将该视频片段添加到候选列表中
+        # Add video clip to candidates if error is within threshold
         if duration_error <= 0.2:
             candidate_descriptions.append(desc)
 
-    # 如果没有符合条件的视频片段，则跳过
+    # Skip if no suitable video clips found
     if not candidate_descriptions:
-        print(f"No suitable scenes found for lyric: {lyric}")
+        print(f"[WARNING] No suitable scenes found for lyric: {lyric}")
         best_matches[str(timestamp)] = "None"
         continue
 
-    # 从候选列表中选择最佳匹配
-    print(len(candidate_descriptions))
+    # Select best match from candidates
+    print(f"[INFO] Found {len(candidate_descriptions)} candidate(s)")
     if len(candidate_descriptions) > 50:
         group_size = int(len(candidate_descriptions) ** 0.5)
         best_match_list = []
@@ -138,17 +135,16 @@ for i, (timestamp, lyric) in enumerate(parsed_lyrics):
         for group in candidate_descriptions_grouped:
             best_match = find_best_match(lyric, group)
             best_match_list.append(best_match)
-        print(best_match_list)
         best_match = find_best_match(lyric, best_match_list)
-        print(best_match)
         best_matches[str(timestamp)] = best_match[0]
     else:
         best_match = find_best_match(lyric, candidate_descriptions)
-        print(best_match)
         best_matches[str(timestamp)] = best_match[0]
+    
+    print(f"[{i+1}/{len(parsed_lyrics)}] [INFO] Best match: {best_match[0]}")
 
-    # 保存最佳匹配结果
+    # Save best matches
     with open(best_matches_path, "w", encoding="utf-8") as f:
         json.dump(best_matches, f, ensure_ascii=False, indent=4)
 
-print("Best matches saved to best_matches.json")
+print("[DONE] Best matches saved to best_matches.json")

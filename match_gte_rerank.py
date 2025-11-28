@@ -27,12 +27,12 @@ for i in range(0, len(descriptions_items), batch_size):
     
     batch_best_score = resp.output.results[0].relevance_score
     batch_best_index = resp.output.results[0].index
-    print(f"Best match in batch: {batch[batch_best_index]}")
-    print(f"Best score in batch: {batch_best_score}")
+    print(f"[INFO] Best match in batch: {batch[batch_best_index]}")
+    print(f"[INFO] Best score in batch: {batch_best_score}")
     
     if batch_best_score > best_score:
         best_score = batch_best_score
         best_match = batch[batch_best_index]
 
-print(f"Best match overall: {best_match}")
-print(f"Best score: {best_score}")
+print(f"[DONE] Best match overall: {best_match}")
+print(f"[DONE] Best score: {best_score}")

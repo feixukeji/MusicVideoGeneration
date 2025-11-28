@@ -1,12 +1,12 @@
-# 音乐视频制作
+# Music Video Generation
 
-根据给定歌词在给定视频集内自动选出契合的片段集。
+Automatically select matching video clips from a given video collection based on lyrics.
 
-## 使用方法
+## Usage
 
-AutoDL上选择GPU：RTX 3090 24GB，框架：PyTorch
+On AutoDL, select GPU: RTX 3090 24GB, Framework: PyTorch
 
-### 环境准备
+### Environment Setup
 
 ```sh
 mkdir -p /root/autodl-tmp/huggingface
@@ -15,7 +15,7 @@ echo 'export HF_ENDPOINT=https://hf-mirror.com' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-### 安装依赖
+### Install Dependencies
 
 ```sh
 sudo apt-get update
@@ -35,37 +35,37 @@ pip install git+https://github.com/huggingface/transformers accelerate flash-att
 pip install qwen-vl-utils[decord] sentence_transformers openai
 ```
 
-### 准备视频和歌词数据
+### Prepare Video and Lyrics Data
 
-将视频文件传至`./autodl-tmp/videos/`目录下，支持多种格式（如mp4、mkv等）。
+Upload video files to `./autodl-tmp/videos/` directory, supporting multiple formats (e.g., mp4, mkv).
 
-将歌词文件传至`./autodl-tmp/lyrics.lrc`。
+Upload lyrics file to `./autodl-tmp/lyrics.lrc`.
 
-### 分割视频片段
+### Split Video into Scenes
 
 ```sh
 python generate_scenes.py
 ```
 
-### 生成视频片段描述
+### Generate Scene Descriptions
 
 ```sh
 python generate_descriptions.py
 ```
 
-### 匹配歌词与视频片段
+### Match Lyrics with Video Clips
 
 ```sh
 python match_sentence_transformers.py
 ```
 
-### 合成视频
+### Compose Video
 
-根据`./autodl-tmp/best_matches.txt`的内容选择最合适的视频片段手动剪辑合成。
+Manually edit and compose the video based on the content in `./autodl-tmp/best_matches.txt`.
 
-## 鸣谢
+## Acknowledgements
 
-本项目用到了以下模型：
+This project uses the following models:
 - [Qwen3-VL](https://github.com/QwenLM/Qwen3-VL)
 - [Qwen3-Embedding](https://github.com/QwenLM/Qwen3-Embedding)
 - [TransNet-V2](https://github.com/soCzech/TransNetV2)

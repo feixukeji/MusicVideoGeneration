@@ -5,18 +5,18 @@ import os
 import json
 import gc
 
-# 配置参数
 SCENES_DIR = "./autodl-tmp/scenes/"
 MODEL_NAME = "Qwen/Qwen3-VL-8B-Instruct"
 MIN_VIDEO_LENGTH = 1
 MAX_VIDEO_LENGTH = 20
-MAX_PIXELS = 480 * 360
+MAX_PIXELS = 640 * 480
 FPS = 8.0
-TEXT_PROMPT = "简要描述这个视频"
+TEXT_PROMPT = "这是一个视频片段，请简要描述其内容（只需描述内容，不要包含多余信息）。"
+MAX_NEW_TOKENS = 256
 
 
 def load_model_and_processor():
-    """加载模型和处理器"""
+    """Load model and processor."""
     model = Qwen3VLForConditionalGeneration.from_pretrained(
         MODEL_NAME,
         torch_dtype=torch.bfloat16,
@@ -28,23 +28,23 @@ def load_model_and_processor():
 
 
 def load_descriptions(descriptions_path, video_folder):
-    """加载已有的描述文件"""
+    """Load existing descriptions file."""
     if os.path.exists(descriptions_path):
         with open(descriptions_path, "r", encoding="utf-8") as f:
             descriptions = json.load(f)
-        print(f"Loaded existing descriptions.json for {video_folder} with {len(descriptions)} entries")
+        print(f"[INFO] Loaded {len(descriptions)} existing descriptions for {video_folder}")
         return descriptions
     return {}
 
 
 def save_descriptions(descriptions_path, descriptions):
-    """保存描述到文件"""
+    """Save descriptions to file."""
     with open(descriptions_path, "w", encoding="utf-8") as f:
         json.dump(descriptions, f, ensure_ascii=False, indent=4)
 
 
 def generate_description(model, processor, video_path):
-    """为单个视频生成描述"""
+    """Generate description for a single video."""
     messages = [
         {
             "role": "user",
@@ -72,7 +72,6 @@ def generate_description(model, processor, video_path):
         videos, video_metadatas = list(videos), list(video_metadatas)
     else:
         videos, video_metadatas = None, None
-    print(video_metadatas)
 
     inputs = processor(
         text=[text],
@@ -86,7 +85,7 @@ def generate_description(model, processor, video_path):
     inputs = inputs.to("cuda")
 
     with torch.inference_mode():
-        generated_ids = model.generate(**inputs, max_new_tokens=512)
+        generated_ids = model.generate(**inputs, max_new_tokens=MAX_NEW_TOKENS)
     
     generated_ids_trimmed = [
         out_ids[len(in_ids):] for in_ids, out_ids in zip(inputs.input_ids, generated_ids)
@@ -95,7 +94,7 @@ def generate_description(model, processor, video_path):
         generated_ids_trimmed, skip_special_tokens=True, clean_up_tokenization_spaces=False
     )
     
-    # 清理显存
+    # Clean up GPU memory
     del inputs, generated_ids, generated_ids_trimmed
     torch.cuda.empty_cache()
     gc.collect()
@@ -104,13 +103,13 @@ def generate_description(model, processor, video_path):
 
 
 def process_video_folder(model, processor, folder_path, video_folder):
-    """处理单个视频文件夹"""
+    """Process a single video folder."""
     scenes_length_path = os.path.join(folder_path, "scenes_length.json")
     descriptions_path = os.path.join(folder_path, "descriptions.json")
     
-    # 检查 scenes_length.json 是否存在
+    # Check if scenes_length.json exists
     if not os.path.exists(scenes_length_path):
-        print(f"Warning: {scenes_length_path} not found, skipping folder {video_folder}")
+        print(f"[WARNING] {scenes_length_path} not found, skipping folder {video_folder}")
         return
     
     descriptions = load_descriptions(descriptions_path, video_folder)
@@ -119,60 +118,59 @@ def process_video_folder(model, processor, folder_path, video_folder):
         scenes_lengths = json.load(f)
     
     for filename, video_length in scenes_lengths.items():
-        # 跳过已经处理过的片段
+        # Skip already processed segments
         if filename in descriptions:
-            print(f"Skipping {filename} as it has already been processed.")
+            print(f"[INFO] Skipping {filename} (already processed)")
             continue
         
         video_path = os.path.join(folder_path, filename)
         
-        # 检查视频文件是否存在
+        # Check if video file exists
         if not os.path.exists(video_path):
-            print(f"Warning: Video file {video_path} not found, skipping.")
+            print(f"[WARNING] Video file {video_path} not found, skipping")
             continue
         
         if video_length < MIN_VIDEO_LENGTH or video_length > MAX_VIDEO_LENGTH:
-            print(f"Skip {filename} because its length is {video_length} seconds.")
+            print(f"[INFO] Skipping {filename} (length: {video_length}s, out of range)")
             continue
 
-        print(f"Processing {filename}...")
+        print(f"[INFO] Processing {filename}...")
         
         try:
             description = generate_description(model, processor, video_path)
             descriptions[filename] = description
             save_descriptions(descriptions_path, descriptions)
         except Exception as e:
-            print(f"Error processing {filename}: {e}")
-            # 清理显存后继续处理下一个
+            print(f"[ERROR] Failed to process {filename}: {e}")
+            # Clean up GPU memory and continue processing next file
             torch.cuda.empty_cache()
             gc.collect()
             continue
     
-    print(f"All scenes for {video_folder} have been processed.")
+    print(f"[DONE] All scenes for {video_folder} have been processed")
 
 
 def main():
-    """主函数"""
-    print("Loading model and processor...")
+    print("[INFO] Loading model and processor...")
     model, processor = load_model_and_processor()
     
-    # 获取所有视频文件夹
+    # Get all video folders
     video_folders = [
         f for f in os.listdir(SCENES_DIR) 
         if os.path.isdir(os.path.join(SCENES_DIR, f))
     ]
     
     if not video_folders:
-        print(f"No video folders found in {SCENES_DIR}")
+        print(f"[WARNING] No video folders found in {SCENES_DIR}")
         return
     
-    print(f"Found {len(video_folders)} video folder(s) to process.")
+    print(f"[INFO] Found {len(video_folders)} video folder(s) to process")
     
     for video_folder in video_folders:
         folder_path = os.path.join(SCENES_DIR, video_folder)
         process_video_folder(model, processor, folder_path, video_folder)
     
-    print("All video folders have been processed.")
+    print("[DONE] All video folders have been processed")
 
 
 if __name__ == "__main__":
