@@ -1,8 +1,10 @@
-# 音乐视频合成
+# 音乐视频制作
 
-根据给定的音乐（歌词）在给定视频集内剪出契合的片段，进行剪辑、拼接、合成。
+根据给定歌词在给定视频集内自动选出契合的片段集。
 
 ## 使用方法
+
+AutoDL上选择GPU：RTX 3090 24GB，框架：PyTorch
 
 ### 环境准备
 
@@ -19,22 +21,25 @@ source ~/.bashrc
 sudo apt-get update
 sudo apt-get install git-lfs
 git lfs install
+python -m pip install --upgrade pip
 ```
 
 ```sh
-pip install tensorflow==2.17.0
 apt-get install ffmpeg
 pip install ffmpeg-python pillow torchvision
-git clone https://github.com/soCzech/TransNetV2.git
-cd TransNetV2
-git lfs pull
-python setup.py install
+pip install transnetv2-pytorch
 ```
 
 ```sh
 pip install git+https://github.com/huggingface/transformers accelerate flash-attn
 pip install qwen-vl-utils[decord] sentence_transformers openai
 ```
+
+### 准备视频和歌词数据
+
+将视频文件传至`./autodl-tmp/videos/`目录下，支持多种格式（如mp4、mkv等）。
+
+将歌词文件传至`./autodl-tmp/lyrics.lrc`。
 
 ### 分割视频片段
 
@@ -50,33 +55,17 @@ python generate_descriptions.py
 
 ### 匹配歌词与视频片段
 
-使用大语言模型询问（待更新）：
-
-```sh
-python match_llm.py
-```
-
-或使用Multilingual-E5文本排序：
-
 ```sh
 python match_sentence_transformers.py
 ```
 
-或使用GTE文本排序（待更新）：
+### 合成视频
 
-```sh
-python match_gte_rerank.py
-```
-
-### 合成视频（待更新）
-
-```sh
-python compose.py
-```
+根据`./autodl-tmp/best_matches.txt`的内容选择最合适的视频片段手动剪辑合成。
 
 ## 鸣谢
 
 本项目用到了以下模型：
-- [Qwen2.5-VL](https://github.com/QwenLM/Qwen2.5-VL)
-- [Multilingual-E5](https://huggingface.co/intfloat/multilingual-e5-large-instruct)
+- [Qwen3-VL](https://github.com/QwenLM/Qwen3-VL)
+- [Qwen3-Embedding](https://github.com/QwenLM/Qwen3-Embedding)
 - [TransNet-V2](https://github.com/soCzech/TransNetV2)
