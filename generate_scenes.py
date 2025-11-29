@@ -4,9 +4,15 @@ import warnings
 from transnetv2_pytorch import TransNetV2
 import ffmpeg
 import json
+import argparse
 
 # Filter out warnings related to deterministic algorithm
 warnings.filterwarnings("ignore", message=".*Deterministic behavior was enabled.*")
+
+# Argument parser for optional deletion of source videos
+parser = argparse.ArgumentParser()
+parser.add_argument("--delete-source", action="store_true")
+args = parser.parse_args()
 
 model = TransNetV2(device='auto')
 model.eval()
@@ -66,5 +72,9 @@ for video_idx, video_name in enumerate(video_files, 1):
         json.dump(scenes_length, f, ensure_ascii=False, indent=4)
     
     print(f"[{video_idx}/{total_videos}] [DONE] Saved {total_scenes} scenes to {video_output_dir}")
+    
+    if args.delete_source:
+        os.remove(video_path)
+        print(f"[{video_idx}/{total_videos}] [INFO] Deleted source file: {video_name}")
     
 print("[DONE] All videos have been processed")

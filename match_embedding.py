@@ -2,14 +2,28 @@ import json
 import re
 import os
 import torch
-from sentence_transformers import SentenceTransformer
+import torch.nn.functional as F
+from torch import Tensor
+from transformers import AutoTokenizer, AutoModel
 
 LRC_PATH = "./autodl-tmp/lyrics.lrc"
 SCENES_DIR = "./autodl-tmp/scenes/"
 BEST_MATCHES_PATH = "./autodl-tmp/best_matches.txt"
 TOP_K = 3  # Save top K best matches
 MODEL_NAME = 'Qwen/Qwen3-Embedding-8B'
+MAX_LENGTH = 256
 TASK_INSTRUCTION = 'Given a poetic lyric, retrieve a video description that visually represents the metaphor or scene implied.'
+
+
+def last_token_pool(last_hidden_states: Tensor, attention_mask: Tensor) -> Tensor:
+    """Extract embeddings from the last token position."""
+    left_padding = (attention_mask[:, -1].sum() == attention_mask.shape[0])
+    if left_padding:
+        return last_hidden_states[:, -1]
+    else:
+        sequence_lengths = attention_mask.sum(dim=1) - 1
+        batch_size = last_hidden_states.shape[0]
+        return last_hidden_states[torch.arange(batch_size, device=last_hidden_states.device), sequence_lengths]
 
 
 def parse_lyrics(lyrics_lines: list[str]) -> tuple[list[float], list[str]]:
@@ -67,6 +81,16 @@ def load_descriptions(scenes_dir: str) -> dict[str, str]:
 
 
 if __name__ == "__main__":
+    # Load tokenizer and model
+    print("[INFO] Loading tokenizer and model...")
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, padding_side='left')
+    # We recommend enabling flash_attention_2 for better acceleration and memory saving.
+    model = AutoModel.from_pretrained(
+        MODEL_NAME,
+        attn_implementation="flash_attention_2",
+        torch_dtype=torch.float16
+    ).cuda()
+
     # Read and parse lyrics
     with open(LRC_PATH, "r", encoding="utf-8") as f:
         lyrics = f.readlines()
@@ -86,21 +110,38 @@ if __name__ == "__main__":
     
     print(f"[INFO] Processing {len(parsed_lyrics)} lyrics and {len(documents)} scene descriptions")
     
-    # Load model
-    model = SentenceTransformer(
-        MODEL_NAME,
-        model_kwargs={"attn_implementation": "flash_attention_2", "device_map": "auto"},
-        tokenizer_kwargs={"padding_side": "left"},
-    )
-    
-    # Encode queries and documents with progress bar
+    # Encode queries
     print("[INFO] Encoding queries...")
-    query_embeddings = model.encode(queries, convert_to_tensor=True, show_progress_bar=True)
+    query_batch = tokenizer(
+        queries,
+        padding=True,
+        truncation=True,
+        max_length=MAX_LENGTH,
+        return_tensors="pt",
+    )
+    query_batch.to(model.device)
+    with torch.no_grad():
+        query_outputs = model(**query_batch)
+    query_embeddings = last_token_pool(query_outputs.last_hidden_state, query_batch['attention_mask'])
+    query_embeddings = F.normalize(query_embeddings, p=2, dim=1)
+    
+    # Encode documents
     print("[INFO] Encoding documents...")
-    document_embeddings = model.encode(documents, convert_to_tensor=True, show_progress_bar=True)
+    doc_batch = tokenizer(
+        documents,
+        padding=True,
+        truncation=True,
+        max_length=MAX_LENGTH,
+        return_tensors="pt",
+    )
+    doc_batch.to(model.device)
+    with torch.no_grad():
+        doc_outputs = model(**doc_batch)
+    document_embeddings = last_token_pool(doc_outputs.last_hidden_state, doc_batch['attention_mask'])
+    document_embeddings = F.normalize(document_embeddings, p=2, dim=1)
     
     # Calculate similarity scores
-    scores = model.similarity(query_embeddings, document_embeddings)
+    scores = query_embeddings @ document_embeddings.T
     
     # Get best matches
     top_scores, top_indices = torch.topk(scores, k=min(TOP_K, len(documents)), dim=1)

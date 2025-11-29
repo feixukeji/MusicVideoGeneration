@@ -56,7 +56,7 @@ python generate_descriptions.py
 ### Match Lyrics with Video Clips
 
 ```sh
-python match_sentence_transformers.py
+python match_embedding.py
 ```
 
 ### Compose Video

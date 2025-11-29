@@ -150,7 +150,7 @@ def process_video_folder(model, processor, folder_path, video_folder):
     print(f"[DONE] All scenes for {video_folder} have been processed")
 
 
-def main():
+if __name__ == "__main__":
     print("[INFO] Loading model and processor...")
     model, processor = load_model_and_processor()
     
@@ -162,7 +162,7 @@ def main():
     
     if not video_folders:
         print(f"[WARNING] No video folders found in {SCENES_DIR}")
-        return
+        exit(0)
     
     print(f"[INFO] Found {len(video_folders)} video folder(s) to process")
     
@@ -171,7 +171,3 @@ def main():
         process_video_folder(model, processor, folder_path, video_folder)
     
     print("[DONE] All video folders have been processed")
-
-
-if __name__ == "__main__":
-    main()
