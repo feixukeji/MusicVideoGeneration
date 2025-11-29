@@ -12,7 +12,8 @@ BEST_MATCHES_PATH = "./autodl-tmp/best_matches.txt"
 TOP_K = 3  # Save top K best matches
 MODEL_NAME = 'Qwen/Qwen3-Embedding-8B'
 MAX_LENGTH = 256
-TASK_INSTRUCTION = 'Given a poetic lyric, retrieve a video description that visually represents the metaphor or scene implied.'
+BATCH_SIZE = 64  # Batch size for encoding to avoid OOM
+TASK_INSTRUCTION = 'Retrieve relevant clips matching the scene.'
 
 
 def last_token_pool(last_hidden_states: Tensor, attention_mask: Tensor) -> Tensor:
@@ -110,35 +111,55 @@ if __name__ == "__main__":
     
     print(f"[INFO] Processing {len(parsed_lyrics)} lyrics and {len(documents)} scene descriptions")
     
-    # Encode queries
+    # Encode queries in batches
     print("[INFO] Encoding queries...")
-    query_batch = tokenizer(
-        queries,
-        padding=True,
-        truncation=True,
-        max_length=MAX_LENGTH,
-        return_tensors="pt",
-    )
-    query_batch.to(model.device)
-    with torch.no_grad():
-        query_outputs = model(**query_batch)
-    query_embeddings = last_token_pool(query_outputs.last_hidden_state, query_batch['attention_mask'])
-    query_embeddings = F.normalize(query_embeddings, p=2, dim=1)
+    query_embeddings_list = []
+    for i in range(0, len(queries), BATCH_SIZE):
+        batch_queries = queries[i:i + BATCH_SIZE]
+        query_batch = tokenizer(
+            batch_queries,
+            padding=True,
+            truncation=True,
+            max_length=MAX_LENGTH,
+            return_tensors="pt",
+        )
+        query_batch.to(model.device)
+        with torch.no_grad():
+            query_outputs = model(**query_batch)
+            batch_embeddings = last_token_pool(query_outputs.last_hidden_state, query_batch['attention_mask'])
+            batch_embeddings = F.normalize(batch_embeddings, p=2, dim=1)
+            query_embeddings_list.append(batch_embeddings.cpu())
+        # Clear cache to free memory
+        del query_batch, query_outputs
+        torch.cuda.empty_cache()
+    query_embeddings = torch.cat(query_embeddings_list, dim=0).cuda()
     
-    # Encode documents
-    print("[INFO] Encoding documents...")
-    doc_batch = tokenizer(
-        documents,
-        padding=True,
-        truncation=True,
-        max_length=MAX_LENGTH,
-        return_tensors="pt",
-    )
-    doc_batch.to(model.device)
-    with torch.no_grad():
-        doc_outputs = model(**doc_batch)
-    document_embeddings = last_token_pool(doc_outputs.last_hidden_state, doc_batch['attention_mask'])
-    document_embeddings = F.normalize(document_embeddings, p=2, dim=1)
+    # Encode documents in batches
+    print(f"[INFO] Encoding documents in batches of {BATCH_SIZE}...")
+    document_embeddings_list = []
+    total_batches = (len(documents) + BATCH_SIZE - 1) // BATCH_SIZE
+    for i in range(0, len(documents), BATCH_SIZE):
+        batch_docs = documents[i:i + BATCH_SIZE]
+        batch_num = i // BATCH_SIZE + 1
+        if batch_num % 10 == 0 or batch_num == total_batches:
+            print(f"[INFO] Processing document batch {batch_num}/{total_batches}")
+        doc_batch = tokenizer(
+            batch_docs,
+            padding=True,
+            truncation=True,
+            max_length=MAX_LENGTH,
+            return_tensors="pt",
+        )
+        doc_batch.to(model.device)
+        with torch.no_grad():
+            doc_outputs = model(**doc_batch)
+            batch_embeddings = last_token_pool(doc_outputs.last_hidden_state, doc_batch['attention_mask'])
+            batch_embeddings = F.normalize(batch_embeddings, p=2, dim=1)
+            document_embeddings_list.append(batch_embeddings.cpu())
+        # Clear cache to free memory
+        del doc_batch, doc_outputs
+        torch.cuda.empty_cache()
+    document_embeddings = torch.cat(document_embeddings_list, dim=0).cuda()
     
     # Calculate similarity scores
     scores = query_embeddings @ document_embeddings.T
