@@ -9,6 +9,7 @@ from transformers import AutoTokenizer, AutoModel
 LRC_PATH = "./autodl-tmp/lyrics.lrc"
 SCENES_DIR = "./autodl-tmp/scenes/"
 BEST_MATCHES_PATH = "./autodl-tmp/best_matches.txt"
+SCENE_EMBEDDINGS_PATH = "./autodl-tmp/scene_embeddings.pt"
 TOP_K = 3  # Save top K best matches
 MODEL_NAME = 'Qwen/Qwen3-Embedding-8B'
 MAX_LENGTH = 256
@@ -27,21 +28,18 @@ def last_token_pool(last_hidden_states: Tensor, attention_mask: Tensor) -> Tenso
         return last_hidden_states[torch.arange(batch_size, device=last_hidden_states.device), sequence_lengths]
 
 
-def parse_lyrics(lyrics_lines: list[str]) -> tuple[list[float], list[str]]:
-    """Parse lyrics file and extract timestamps and content."""
-    timestamps = []
+def parse_lyrics(lyrics_lines: list[str]) -> list[str]:
+    """Parse lyrics file and return content, ignoring timestamps."""
     parsed_lyrics = []
-    pattern = re.compile(r'\[(\d+):(\d+\.\d+)\](.*)')
+    # Pattern to identify and remove timestamps like [00:12.34]
+    timestamp_pattern = re.compile(r'\[\d+:\d+(?:\.\d+)?\]')
     
     for line in lyrics_lines:
-        match = pattern.match(line)
-        if match:
-            timestamp = int(match.group(1)) * 60 + float(match.group(2))
-            content = match.group(3).strip()
-            if content:  # Skip empty lyrics
-                timestamps.append(timestamp)
-                parsed_lyrics.append(content)
-    return timestamps, parsed_lyrics
+        # Remove all timestamps from the line
+        content = timestamp_pattern.sub('', line).strip()
+        if content:  # Skip empty lyrics
+            parsed_lyrics.append(content)
+    return parsed_lyrics
 
 
 def get_detailed_instruct(task_description: str, query: str) -> str:
@@ -56,8 +54,8 @@ def load_descriptions(scenes_dir: str) -> dict[str, str]:
     if not os.path.exists(scenes_dir):
         raise FileNotFoundError(f"Scenes directory not found: {scenes_dir}")
     
-    video_folders = [f for f in os.listdir(scenes_dir) 
-                     if os.path.isdir(os.path.join(scenes_dir, f))]
+    video_folders = sorted([f for f in os.listdir(scenes_dir) 
+                     if os.path.isdir(os.path.join(scenes_dir, f))])
     
     print(f"[INFO] Found {len(video_folders)} video folder(s) to process")
     
@@ -96,7 +94,7 @@ if __name__ == "__main__":
     with open(LRC_PATH, "r", encoding="utf-8") as f:
         lyrics = f.readlines()
     
-    timestamps, parsed_lyrics = parse_lyrics(lyrics)
+    parsed_lyrics = parse_lyrics(lyrics)
     
     # Load scene descriptions
     descriptions = load_descriptions(SCENES_DIR)
@@ -134,32 +132,52 @@ if __name__ == "__main__":
         torch.cuda.empty_cache()
     query_embeddings = torch.cat(query_embeddings_list, dim=0).cuda()
     
-    # Encode documents in batches
-    print(f"[INFO] Encoding documents in batches of {BATCH_SIZE}...")
-    document_embeddings_list = []
-    total_batches = (len(documents) + BATCH_SIZE - 1) // BATCH_SIZE
-    for i in range(0, len(documents), BATCH_SIZE):
-        batch_docs = documents[i:i + BATCH_SIZE]
-        batch_num = i // BATCH_SIZE + 1
-        if batch_num % 10 == 0 or batch_num == total_batches:
-            print(f"[INFO] Processing document batch {batch_num}/{total_batches}")
-        doc_batch = tokenizer(
-            batch_docs,
-            padding=True,
-            truncation=True,
-            max_length=MAX_LENGTH,
-            return_tensors="pt",
-        )
-        doc_batch.to(model.device)
-        with torch.no_grad():
-            doc_outputs = model(**doc_batch)
-            batch_embeddings = last_token_pool(doc_outputs.last_hidden_state, doc_batch['attention_mask'])
-            batch_embeddings = F.normalize(batch_embeddings, p=2, dim=1)
-            document_embeddings_list.append(batch_embeddings.cpu())
-        # Clear cache to free memory
-        del doc_batch, doc_outputs
-        torch.cuda.empty_cache()
-    document_embeddings = torch.cat(document_embeddings_list, dim=0).cuda()
+    # Try to load embeddings from cache
+    loaded_cache = False
+    if os.path.exists(SCENE_EMBEDDINGS_PATH):
+        print(f"[INFO] Loading document embeddings from {SCENE_EMBEDDINGS_PATH}...")
+        try:
+            cache_data = torch.load(SCENE_EMBEDDINGS_PATH)
+            if cache_data['keys'] == scene_keys:
+                document_embeddings = cache_data['embeddings'].to(model.device)
+                print("[INFO] Embeddings loaded successfully.")
+                loaded_cache = True
+            else:
+                print("[WARNING] Cached keys do not match current scene keys. Recomputing embeddings.")
+        except Exception as e:
+            print(f"[WARNING] Failed to load embeddings cache: {e}. Recomputing embeddings.")
+
+    if not loaded_cache:
+        # Encode documents in batches
+        print(f"[INFO] Encoding documents in batches of {BATCH_SIZE}...")
+        document_embeddings_list = []
+        total_batches = (len(documents) + BATCH_SIZE - 1) // BATCH_SIZE
+        for i in range(0, len(documents), BATCH_SIZE):
+            batch_docs = documents[i:i + BATCH_SIZE]
+            batch_num = i // BATCH_SIZE + 1
+            if batch_num % 10 == 0 or batch_num == total_batches:
+                print(f"[INFO] Processing document batch {batch_num}/{total_batches}")
+            doc_batch = tokenizer(
+                batch_docs,
+                padding=True,
+                truncation=True,
+                max_length=MAX_LENGTH,
+                return_tensors="pt",
+            )
+            doc_batch.to(model.device)
+            with torch.no_grad():
+                doc_outputs = model(**doc_batch)
+                batch_embeddings = last_token_pool(doc_outputs.last_hidden_state, doc_batch['attention_mask'])
+                batch_embeddings = F.normalize(batch_embeddings, p=2, dim=1)
+                document_embeddings_list.append(batch_embeddings.cpu())
+            # Clear cache to free memory
+            del doc_batch, doc_outputs
+            torch.cuda.empty_cache()
+        document_embeddings = torch.cat(document_embeddings_list, dim=0).cuda()
+        
+        # Save embeddings
+        print(f"[INFO] Saving document embeddings to {SCENE_EMBEDDINGS_PATH}...")
+        torch.save({'keys': scene_keys, 'embeddings': document_embeddings.cpu()}, SCENE_EMBEDDINGS_PATH)
     
     # Calculate similarity scores
     scores = query_embeddings @ document_embeddings.T
