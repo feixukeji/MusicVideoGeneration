@@ -69,3 +69,7 @@ This project uses the following models:
 - [Qwen3-VL](https://github.com/QwenLM/Qwen3-VL)
 - [Qwen3-Embedding](https://github.com/QwenLM/Qwen3-Embedding)
 - [TransNet-V2](https://github.com/soCzech/TransNetV2)
+
+## License
+
+This project is licensed under the [Apache License 2.0](./LICENSE).
